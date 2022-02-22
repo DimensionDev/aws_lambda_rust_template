@@ -6,7 +6,7 @@ autobins = false
 
 [[bin]]
 name = "bootstrap"
-path = "src/main.rs"
+path = "examples/lambda.rs"
 
 [dependencies]
 log = "0.4"

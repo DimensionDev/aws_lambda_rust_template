@@ -1,8 +1,5 @@
-mod controller;
-mod error;
-
 use lambda_http::{service_fn, Error as LambdaError};
-use crate::controller::entrypoint;
+use aws_lambda_rust_template::controller::entrypoint;
 
 #[tokio::main]
 async fn main() -> Result<(), LambdaError> {
