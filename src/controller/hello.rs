@@ -1,5 +1,5 @@
-use crate::error::{Error, ErrorCategory};
-use lambda_http::{Request, Response, Body, RequestExt, http::StatusCode};
+use crate::error::Error;
+use lambda_http::{http::StatusCode, Body, Request, RequestExt, Response};
 use serde::Serialize;
 
 use super::json_response;
@@ -11,13 +11,14 @@ struct HelloResponse {
 
 pub async fn controller(req: Request) -> Result<Response<Body>, Error> {
     let params = req.query_string_parameters();
-    let target = params.get("name").ok_or(Error {
-        category: ErrorCategory::BadRequest,
-        module: "hello".into(),
-        description: "param 'name' missing".into(),
-    })?;
+    let target = params
+        .first("name")
+        .ok_or(Error::ParamMissing("name".into()))?;
 
-    json_response(StatusCode::OK, &HelloResponse {
-        hello: target.to_string(),
-    })
+    json_response(
+        StatusCode::OK,
+        &HelloResponse {
+            hello: target.to_string(),
+        },
+    )
 }

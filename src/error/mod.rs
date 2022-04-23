@@ -1,37 +1,27 @@
-use std::{fmt, error};
 use lambda_http::http::StatusCode;
 
-#[derive(Debug, Clone)]
-pub enum ErrorCategory {
-    Internal,
-    BadRequest,
-    NotFound,
-    Forbidden,
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("Param missing: {0}")]
+    ParamMissing(String),
+    #[error("JSON Parse error")]
+    ParseError(#[from] serde_json::error::Error),
+    #[error("no body provided")]
+    BodyMissing,
+    #[error("Lambda HTTP error: {0}")]
+    LambdaHttpError(#[from] lambda_http::http::Error),
 }
-
-#[derive(Debug, Clone)]
-pub struct Error {
-    pub category: ErrorCategory,
-    pub module: String,
-    pub description: String,
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[{}] {}", self.module, self.description)
-    }
-}
-impl error::Error for Error {}
 
 impl Error {
     pub fn http_status(&self) -> StatusCode {
-        match self.category {
-            ErrorCategory::Internal => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorCategory::BadRequest => StatusCode::BAD_REQUEST,
-            ErrorCategory::NotFound => StatusCode::NOT_FOUND,
-            ErrorCategory::Forbidden => StatusCode::FORBIDDEN,
+        match self {
+            Error::ParamMissing(_) => StatusCode::BAD_REQUEST,
+            Error::ParseError(_) => StatusCode::BAD_REQUEST,
+            Error::BodyMissing => StatusCode::BAD_REQUEST,
+            Error::LambdaHttpError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+
         }
     }
 }
 
-// pub type Result<T> = core::result::Result<T, Error>;
+pub type Result<T> = core::result::Result<T, Error>;

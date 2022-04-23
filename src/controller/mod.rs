@@ -7,11 +7,10 @@ use lambda_http::{Request, Response, IntoResponse, Error as LambdaError, http::{
 use log::info;
 use serde::{Serialize, Deserialize};
 
-use crate::error::{Error, ErrorCategory};
+use crate::error::{Error, Result as MyResult};
 
 #[derive(Debug, Serialize)]
 struct ErrorResponse {
-    pub module: String,
     pub message: String,
 }
 
@@ -19,7 +18,7 @@ async fn entry<F>(
     req: Request,
     controller: fn(Request) -> F
 ) -> Response<Body>
-where F: Future<Output = Result<Response<Body>, Error>> {
+where F: Future<Output = MyResult<Response<Body>>> {
     match controller(req).await {
         Ok(resp) => resp,
         Err(err) => error_response(err),
@@ -40,42 +39,24 @@ pub async fn entrypoint(req: Request) -> Result<impl IntoResponse, LambdaError> 
     })
 }
 
-fn json_parse_body<T>(req: &Request) -> Result<T, Error>
+fn json_parse_body<T>(req: &Request) -> MyResult<T>
 where for<'de> T: Deserialize<'de>
 {
     match req.body() {
-        Body::Empty => Err(Error {
-            category: ErrorCategory::BadRequest,
-            module: "merkle_upload".into(),
-            description: "no body provided".into(),
-        }),
+        Body::Empty => Err(Error::BodyMissing),
         Body::Text(text) => {
-            serde_json::from_str(text.as_str())
-                .map_err(|_| Error {
-                    category: ErrorCategory::BadRequest,
-                    module: "merkle_upload".into(),
-                    description: "JSON parse error".into(),
-                })
+            serde_json::from_str(text).map_err(|e| e.into())
         },
         Body::Binary(bin) => {
-            serde_json::from_slice(bin.as_slice())
-                .map_err(|_| Error {
-                    category: ErrorCategory::BadRequest,
-                    module: "merkle_upload".into(),
-                    description: "JSON parse error".into(),
-                })
+            serde_json::from_slice(bin.as_slice()).map_err(|e| e.into())
         },
     }
 }
 
-fn json_response<T>(status: StatusCode, resp: &T) -> Result<Response<Body>, Error>
+fn json_response<T>(status: StatusCode, resp: &T) -> MyResult<Response<Body>>
 where T: Serialize
 {
-    let body = serde_json::to_string(resp).map_err(|_| Error {
-        category: ErrorCategory::Internal,
-        module: "json_response".into(),
-        description: "error when seriailzing JSON response".into(),
-    })?;
+    let body: String = serde_json::to_string(resp)?;
 
     Response::builder()
         .status(status)
@@ -84,17 +65,12 @@ where T: Serialize
         .header("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token")
         .header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
         .body(body.into())
-        .map_err(|_| Error {
-            category: ErrorCategory::Internal,
-            module: "json_response".into(),
-            description: "failed to render response".into(),
-        })
+        .map_err(|e| e.into())
 }
 
 fn error_response(err: Error) -> Response<Body> {
     let resp = ErrorResponse {
-        module: err.module.clone(),
-        message: err.description.clone(),
+        message: err.to_string(),
     };
     let body: String = serde_json::to_string(&resp).unwrap();
 
